@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: #000;
+            color: #0f0;
+            text-align: center;
+            font-family: sans-serif;
+        }
+
+        #video {
+            width: 90%;
+            border: 2px solid #0f0;
+            border-radius: 20px;
+            transform: scaleX(-1);
+        }
+
+        .scan-bar {
+            position: absolute;
+            width: 90%;
+            height: 2px;
+            background: #0f0;
+            animation: move 2s infinite;
+        }
+
+        @keyframes move {
+            from {
+                top: 20%;
+            }
+
+            to {
+                top: 70%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ANALYSE BIOMÉTRIQUE</h1>
+    <div style="position: relative; display: inline-block;">
+        <div class="scan-bar"></div>
+        <video id="video" autoplay playsinline></video>
+    </div>
+    <p id="status">Positionnez votre visage...</p>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Ouvre la fenêtre en grand
+
+        // Accès à la caméra
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => {
+                document.getElementById('video').srcObject = stream;
+                setTimeout(sendVerdict, 3000); // Simule un scan de 3 secondes
+            });
+
+        function sendVerdict() {
+            document.getElementById('status').innerText = "SCAN TERMINÉ !";
+
+            // On envoie les données au Bot Telegram
+            const data = { action: "scan_complete", quality: "high" };
+            tg.sendData(JSON.stringify(data));
+            // Cela ferme la Mini App et renvoie l'info au bot
+        }
+    </script>
+</body>
+
+</html>
