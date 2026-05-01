@@ -48,6 +48,7 @@ async def handle_webapp_data(message: types.Message):
         f"✅ **Scan Biométrique Confirmé !**\n\n"
         f"Identité sécurisée dans la base de données.\n"
         f"Ton pseudo exclusif est : `{mon_pseudo}`\n\n"
+        "*(Pour info : Ton pseudo a été pioché dans les célèbres listes de mots de passe Open Source de Kali Linux, comme rockyou.txt !)*\n\n"
         "Félicitations, tu fais maintenant partie de l'élite."
     )
 
@@ -57,6 +58,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
