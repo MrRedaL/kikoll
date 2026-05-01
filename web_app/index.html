@@ -1,71 +1,224 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="fr">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYS.KIKOLL_V4 // SCAN</title>
+    <!-- Le SDK Telegram est INDISPENSABLE -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <!-- Scripts MediaPipe pour la détection faciale -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+    
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            background: #000;
+            background-color: #050505;
             color: #0f0;
-            text-align: center;
-            font-family: sans-serif;
+            font-family: 'Share Tech Mono', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
         }
 
-        #video {
-            width: 90%;
-            border: 2px solid #0f0;
-            border-radius: 20px;
-            transform: scaleX(-1);
-        }
-
-        .scan-bar {
+        /* Effet scanline CRT global */
+        body::before {
+            content: " ";
+            display: block;
             position: absolute;
-            width: 90%;
-            height: 2px;
-            background: #0f0;
-            animation: move 2s infinite;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
         }
 
-        @keyframes move {
-            from {
-                top: 20%;
-            }
+        .header {
+            position: absolute;
+            top: 20px;
+            text-align: center;
+            width: 100%;
+            z-index: 10;
+        }
 
-            to {
-                top: 70%;
-            }
+        h1 {
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #0f0;
+        }
+
+        .video-container {
+            position: relative;
+            width: 90%;
+            max-width: 400px;
+            border: 2px solid #0f0;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.5);
+            border-radius: 15px;
+            overflow: hidden;
+            z-index: 5;
+            aspect-ratio: 3/4; /* Format portrait */
+        }
+
+        .video-container::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border: 2px solid rgba(0, 255, 0, 0.3);
+            pointer-events: none;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transform: scaleX(-1); /* Effet miroir */
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background: rgba(0, 255, 0, 0.8);
+            box-shadow: 0 0 10px #0f0, 0 0 20px #0f0;
+            top: 0;
+            left: 0;
+            animation: scan 2s infinite linear;
+            z-index: 6;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; opacity: 1; }
+            50% { top: 100%; opacity: 0.5; }
+            100% { top: 0%; opacity: 1; }
+        }
+
+        .status-container {
+            position: absolute;
+            bottom: 40px;
+            text-align: center;
+            width: 100%;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 0;
+            border-top: 2px solid #0f0;
+            border-bottom: 2px solid #0f0;
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.2);
+        }
+
+        #status {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #f00; /* Commence en rouge */
+            text-shadow: 0 0 5px currentColor;
+            letter-spacing: 1px;
+            transition: color 0.3s ease;
         }
     </style>
 </head>
-
 <body>
-    <h1>ANALYSE BIOMÉTRIQUE</h1>
-    <div style="position: relative; display: inline-block;">
-        <div class="scan-bar"></div>
-        <video id="video" autoplay playsinline></video>
+    <div class="header">
+        <h1>SYS.KIKOLL_V4 // ACCÈS</h1>
     </div>
-    <p id="status">Positionnez votre visage...</p>
+
+    <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div class="scan-line" id="scan-line"></div>
+    </div>
+
+    <div class="status-container">
+        <p id="status">INITIALISATION CAMÉRA...</p>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Ouvre la fenêtre en grand
+        tg.expand(); // Force l'ouverture en plein écran dans Telegram
 
-        // Accès à la caméra
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-            .then(stream => {
-                document.getElementById('video').srcObject = stream;
-                setTimeout(sendVerdict, 3000); // Simule un scan de 3 secondes
-            });
+        const videoElement = document.getElementById('video');
+        const statusText = document.getElementById('status');
+        const scanLine = document.getElementById('scan-line');
 
-        function sendVerdict() {
-            document.getElementById('status').innerText = "SCAN TERMINÉ !";
+        // Initialisation de MediaPipe Face Detection
+        const faceDetection = new FaceDetection({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`;
+        }});
+        
+        faceDetection.setOptions({
+            model: 'short', // Modèle optimisé pour les visages proches (caméra selfie)
+            minDetectionConfidence: 0.5
+        });
 
-            // On envoie les données au Bot Telegram
-            const data = { action: "scan_complete", quality: "high" };
-            tg.sendData(JSON.stringify(data));
-            // Cela ferme la Mini App et renvoie l'info au bot
-        }
+        let scanStartTime = null;
+        let scanComplete = false;
+
+        faceDetection.onResults((results) => {
+            // Si le scan est déjà validé, on ne fait plus rien
+            if (scanComplete) return;
+
+            // Si un visage est détecté
+            if (results.detections.length > 0) {
+                if (!scanStartTime) {
+                    // C'est la première frame où on voit un visage
+                    scanStartTime = Date.now();
+                    statusText.innerText = "VISAGE DÉTECTÉ - ANALYSE EN COURS...";
+                    statusText.style.color = "#ff0"; // Jaune
+                    scanLine.style.background = "rgba(255, 255, 0, 0.8)";
+                    scanLine.style.boxShadow = "0 0 10px #ff0";
+                } else {
+                    // On vérifie depuis combien de temps le visage est là
+                    let elapsed = Date.now() - scanStartTime;
+                    
+                    if (elapsed > 2000) { // 2 secondes consécutives = validation
+                        scanComplete = true;
+                        statusText.innerText = "IDENTITÉ CONFIRMÉE !";
+                        statusText.style.color = "#0f0"; // Vert
+                        scanLine.style.background = "rgba(0, 255, 0, 0.8)";
+                        scanLine.style.boxShadow = "0 0 15px #0f0";
+                        scanLine.style.animation = "none";
+                        scanLine.style.top = "50%";
+                        
+                        // Attendre un peu pour que l'utilisateur lise le message
+                        setTimeout(() => {
+                            // On envoie les données (ce qui va fermer la WebApp automatiquement avec le clavier Reply)
+                            tg.sendData(JSON.stringify({ action: "scan_success" }));
+                        }, 1500);
+                    }
+                }
+            } else {
+                // Pas de visage ou visage perdu avant les 2 secondes
+                scanStartTime = null;
+                statusText.innerText = "EN ATTENTE D'UN VISAGE...";
+                statusText.style.color = "#f00"; // Rouge
+                scanLine.style.background = "rgba(255, 0, 0, 0.8)";
+                scanLine.style.boxShadow = "0 0 10px #f00";
+            }
+        });
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await faceDetection.send({image: videoElement});
+            },
+            width: 480,
+            height: 480,
+            facingMode: "user"
+        });
+        
+        camera.start().catch((err) => {
+            statusText.innerText = "ERREUR ACCÈS CAMÉRA";
+            statusText.style.color = "#f00";
+        });
     </script>
 </body>
-
 </html>
